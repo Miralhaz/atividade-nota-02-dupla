@@ -2,13 +2,6 @@ package sptech.school.atividade_nota_02_dupla.dto;
 
 import java.time.LocalDateTime;
 
-/**
- * DTO de SAÍDA (o que o cliente recebe no JSON da API).
- *
- * <p>Nunca devolvemos a entidade direto: o Controller converte
- * (via {@code ConteudoMapper}) para que o formato da API
- * não dependa do formato do banco.
- */
 public class ConteudoResponse {
 
     private Long id;

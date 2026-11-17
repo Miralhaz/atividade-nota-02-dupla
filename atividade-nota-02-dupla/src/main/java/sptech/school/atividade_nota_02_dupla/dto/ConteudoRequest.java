@@ -3,13 +3,6 @@ package sptech.school.atividade_nota_02_dupla.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/**
- * DTO de ENTRADA (o que o cliente envia no POST/PUT).
- *
- * <p>Por que existe um DTO de entrada e não usamos a entidade direto?
- * - Não deixa o cliente "massacrar" campos internos da entidade (como o id).
- * - Permite validar os dados ANTES de chegar no banco.
- */
 public class ConteudoRequest {
 
     @NotBlank(message = "O titulo nao pode ser vazio")

@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * CACHE "LIGHT" (feito à mão, sem Caffeine/Redis/@Cacheable).
+ * ConteudoCache
  *
  * <p>Ele guarda os conteúdos em memória usando um {@link ConcurrentHashMap}:
  * <ul>
@@ -30,44 +30,28 @@ import java.util.concurrent.atomic.AtomicLong;
  *     <li><b>Logs</b>: cada consulta gera um log HIT/MISS com id e tempo em ms.</li>
  * </ul>
  *
- * <p>Por que {@link ConcurrentHashMap} e não {@code HashMap}?
- * Porque a API atende requisições simultâneas (várias threads).
- * O {@code HashMap} comum pode corromper a estrutura interna do mapa quando
- * é usado por várias threads ao mesmo tempo. O {@code ConcurrentHashMap} é
- * seguro para leitura/escrita concorrente.
  */
 @Component
 public class ConteudoCache {
 
     private static final Logger log = LoggerFactory.getLogger(ConteudoCache.class);
 
-    /**
-     * Mapa principal do cache: id -> entrada.
-     */
+    // Mapa principal do cache (id junto a uma EntradaCache com o conteúdo)
     private final Map<Long, EntradaCache> cache = new ConcurrentHashMap<>();
 
-    /**
-     * Limite máximo de itens no cache (vem do application.properties).
-     */
+    // Limite máximo de itens no cache
     private final int maxItens;
 
-    /**
-     * Tempo de vida de cada item, em segundos (vem do application.properties).
-     */
+    // Tempo de vida de cada item (application.properties)
     private final long ttlSegundos;
 
-    /**
-     * Contadores das estatísticas. {@link AtomicLong} garante que o "conta + 1" seja feito
-     * de forma atômica (sem perder contagem quando duas threads somam ao mesmo tempo).
-     */
+    // Contadores de estatísticas (AtomicLong faz com que, caso haja 2 ou mais threads
+    // usadas ao mesmo tempo, seja adicionado +1 sem qualquer conflito com o valor).
     private final AtomicLong hits = new AtomicLong(0);
     private final AtomicLong misses = new AtomicLong(0);
     private final AtomicLong evictions = new AtomicLong(0);
 
-    /**
-     * O {@code @Value} injeta o valor da propriedade do application.properties.
-     * Exemplo: {@code app.cache.max-itens=5} -> injeta o 5 aqui.
-     */
+    // Ponto de injeção de valores vindos do application.properties
     public ConteudoCache(@Value("${app.cache.max-itens:5}") int maxItens,
                           @Value("${app.cache.ttl-segundos:60}") long ttlSegundos) {
         this.maxItens = maxItens;
@@ -75,22 +59,18 @@ public class ConteudoCache {
         log.info("ConteudoCache iniciado - limite={} itens, TTL={}s", this.maxItens, this.ttlSegundos);
     }
 
-    /**
-     * Tenta buscar um conteúdo no cache.
-     *
-     * <p>Este método é o CORAÇÃO do cache. Ele:
-     * <ol>
-     *     <li>olha se o id existe no mapa (se não existir -> MISS);</li>
-     *     <li>olha se o item expirou pelo TTL (se expirou -> remove e conta MISS);</li>
-     *     <li>se estiver válido -> atualiza o "último acesso" e conta HIT.</li>
-     * </ol>
-     *
-     * <p>O log de HIT/MISS (com o tempo gasto) é feito aqui, dentro do cache,
-     * porque é aqui que sabemos se foi HIT ou MISS.
-     *
-     * @param id identificador do conteúdo procurado.
-     * @return o conteúdo se deu HIT (ou Optional.empty() se deu MISS).
-     */
+
+     // Metodo que:
+     // - olha se o id existe no mapa (se não existir -> MISS)
+     // - olha se o item expirou pelo TTL (se expirou -> remove e conta MISS)
+     // - se estiver válido -> atualiza o "último acesso" e conta HIT.
+
+     // O log de HIT/MISS (com o tempo gasto) é feito aqui.
+     // Aqui sabemos se houve um HIT ou MISS
+
+     // id -> identificador do conteúdo procurado.
+     // return -> retorna o conteúdo se deu HIT (ou Optional.empty() se deu MISS).
+
     public Optional<ConteudoCacheItem> buscar(Long id) {
         long inicio = System.currentTimeMillis();
         EntradaCache entrada = cache.get(id);
@@ -119,21 +99,17 @@ public class ConteudoCache {
         return Optional.of(entrada.getConteudo());
     }
 
-    /**
-     * Guarda (ou atualiza) um conteúdo no cache.
-     *
-     * <p>Se o cache já estiver cheio, removemos o item com o "último acesso" mais
-     * antigo (política LRU) e contamos uma <b>eviction</b>.
-     *
-     * @param item conteúdo que acabou de ser buscado na fonte (banco).
-     */
+
+     // Guarda (ou atualiza) um conteúdo no cache.
+     // Se o cache já estiver cheio, remove o item com o "último acesso" mais antigo (política LRU) e conta-se uma eviction
+     // item -> conteúdo que acabou de ser buscado na fonte (banco).
     public void armazenar(ConteudoCacheItem item) {
         if (item == null || item.getId() == null) {
             return;
         }
         Long id = item.getId();
 
-        // Se o item já está no cache, apenas substituímos (sem contar eviction).
+        // Se o item já está no cache, apenas substitui (sem contar eviction).
         EntradaCache anterior = cache.put(id, new EntradaCache(item, Instant.now()));
         if (anterior != null) {
             return;
@@ -151,12 +127,7 @@ public class ConteudoCache {
         }
     }
 
-    /**
-     * Invalida (remove) a entrada de um conteúdo do cache.
-     * Usado no PUT e no DELETE.
-     *
-     * @return true se havia algo no cache para remover.
-     */
+    // Invalidar a entrada de um conteúdo no cache
     public boolean invalidar(Long id) {
         boolean removido = cache.remove(id) != null;
         if (removido) {
@@ -165,20 +136,14 @@ public class ConteudoCache {
         return removido;
     }
 
-    /**
-     * Limpa todo o cache (endpoint DELETE /cache).
-     */
+    // Limpar inteiramente o cache
     public void limpar() {
         int quantidade = cache.size();
         cache.clear();
         log.info("Cache LIMPO - {} itens removidos", quantidade);
     }
 
-    /**
-     * Monta as estatísticas do cache para o endpoint GET /cache/estatisticas.
-     *
-     * @return um Map com os números (tamanho, limite, hits, misses, evictions, hitRatio).
-     */
+    // Metodo para montar o endpoint de estatísticas
     public Map<String, Object> estatisticas() {
         long totalHits = hits.get();
         long totalMisses = misses.get();
@@ -197,21 +162,15 @@ public class ConteudoCache {
         return stats;
     }
 
-    /**
-     * Procura o item cujo "último acesso" é o mais antigo (o menos usado recentemente).
-     *
-     * <p>É aqui que está o LRU: comparamos o instante de "último acesso" de cada
-     * entrada e devolvemos o id da entrada mais antiga.
-     *
-     * @return o id do item a ser removido, ou null se não houver nada para remover.
-     */
+    // Metodo para procurar o item com o "último acesso" mais antigo (usado para o LRU e sua política
+    // de sair o item de maior tempo sem uso)
     private Long idMenosUsadoRecentemente() {
         final Long[] candidato = {null};
         final Instant[] ultimoAcessoCandidato = {null};
 
         cache.forEach((id, entrada) -> {
             Instant ultimoAcesso = entrada.getUltimoAcesso();
-            // Se ainda não achamos ninguém, ou achamos um acesso mais antigo, este é o candidato.
+            // Se ainda não achou ninguém, ou achou um acesso mais antigo, este é o candidato.
             if (candidato[0] == null || ultimoAcesso.isBefore(ultimoAcessoCandidato[0])) {
                 candidato[0] = id;
                 ultimoAcessoCandidato[0] = ultimoAcesso;
@@ -221,16 +180,10 @@ public class ConteudoCache {
         return candidato[0];
     }
 
-    /**
-     * @return o limite configurado (usado também nos testes).
-     */
     public int getMaxItens() {
         return maxItens;
     }
 
-    /**
-     * @return o TTL configurado em segundos (usado também nos testes).
-     */
     public long getTtlSegundos() {
         return ttlSegundos;
     }

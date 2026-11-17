@@ -7,9 +7,6 @@ import sptech.school.atividade_nota_02_dupla.dto.EstatisticasCacheResponse;
 
 import java.util.Map;
 
-/**
- * CONTROLLER do CACHE: endpoints de administração/monitoramento do cache.
- */
 @RestController
 @RequestMapping("/cache")
 public class CacheController {
@@ -20,10 +17,6 @@ public class CacheController {
         this.cache = cache;
     }
 
-    /**
-     * GET /cache/estatisticas
-     * <p>Retorna as estatísticas do cache: tamanho, limite, hits, misses, evictions, hitRatio.
-     */
     @GetMapping("/estatisticas")
     public ResponseEntity<EstatisticasCacheResponse> estatisticas() {
         Map<String, Object> stats = cache.estatisticas();
@@ -39,10 +32,6 @@ public class CacheController {
         return ResponseEntity.ok(dto);
     }
 
-    /**
-     * DELETE /cache
-     * <p>Limpa todo o cache (remove todos os itens).
-     */
     @DeleteMapping
     public ResponseEntity<Map<String, String>> limpar() {
         cache.limpar();
